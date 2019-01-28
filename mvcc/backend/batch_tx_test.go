@@ -48,13 +48,13 @@ func TestBatchTxPut(t *testing.T) {
 	b, _ := NewDefaultTmpBackend()
 	t.Log(b)
 	tx := b.BatchTx()
-	tx.Lock()
-	defer tx.Unlock()
+	// tx.Lock()
+	// defer tx.Unlock()
 
 	// create bucket
 	tx.UnsafeCreateBucket([]byte("test"))
 
-	// // put
+	// put
 	v := []byte("bar")
 	tx.UnsafePut([]byte("test"), []byte("foo"), v)
 

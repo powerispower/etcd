@@ -18,9 +18,12 @@ import (
 	"bytes"
 	"math"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	kvv "github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"
+	goctx "golang.org/x/net/context"
 )
 
 type BatchTx interface {
@@ -166,32 +169,35 @@ func (t *batchTx) safePending() int {
 
 func (t *batchTx) commit(stop bool) {
 	// commit the last tx
-	// if t.tx != nil {
-	// 	if t.pending == 0 && !stop {
-	// 		return
-	// 	}
+	if t.tx != nil {
+		if t.pending == 0 && !stop {
+			return
+		}
 
-	// 	start := time.Now()
+		start := time.Now()
 
-	// 	// gofail: var beforeCommit struct{}
-	// 	err := t.tx.Commit(goctx.Background())
-	// 	// gofail: var afterCommit struct{}
+		// gofail: var beforeCommit struct{}
+		err := t.tx.Commit(goctx.Background())
+		// gofail: var afterCommit struct{}
 
-	// 	commitSec.Observe(time.Since(start).Seconds())
-	// 	atomic.AddInt64(&t.backend.commits, 1)
+		commitSec.Observe(time.Since(start).Seconds())
+		atomic.AddInt64(&t.backend.commits, 1)
 
-	// 	t.pending = 0
-	// 	if err != nil {
-	// 		if t.backend.lg != nil {
-	// 			t.backend.lg.Fatal("failed to commit tx", zap.Error(err))
-	// 		} else {
-	// 			plog.Fatalf("cannot commit tx (%s)", err)
-	// 		}
-	// 	}
-	// }
-	// if !stop {
-	// 	t.tx = t.backend.begin(true)
-	// }
+		t.pending = 0
+		if err != nil {
+			if t.backend.lg != nil {
+				t.backend.lg.Fatal("failed to commit tx", zap.Error(err))
+			} else {
+				plog.Fatalf("cannot commit tx (%s)", err)
+			}
+		}
+	}
+	if t.tx == nil {
+		t.tx = t.backend.begin(true)
+	}
+	if stop {
+		t.tx.Reset()
+	}
 }
 
 type batchTxBuffered struct {
@@ -257,7 +263,7 @@ func (t *batchTxBuffered) unsafeCommit(stop bool) {
 	t.batchTx.commit(stop)
 
 	if !stop {
-		t.backend.readTx.tx = t.backend.begin(false)
+		t.backend.readTx.tx = t.backend.begin(true)
 	}
 }
 
